@@ -3,7 +3,7 @@ import openai
 import random
 
 # Set up OpenAI API key
-openai.api_key = "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"
+openai.api_key = "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"
 
 def generate_gpt3_quiz(topic, num_questions):
     quiz_data = {'questions': []}
