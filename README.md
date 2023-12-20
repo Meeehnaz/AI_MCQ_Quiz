@@ -21,11 +21,12 @@ Make sure you have the required dependencies installed. You can install them usi
 
 ```bash
 pip install streamlit openai
+pip install langchain
 ```
 
 ### Getting Started
 
-1. Set up your OpenAI API key
+1. Set up your OpenAI API key and save it in a file called apikey.py
 
 2. Run the application:
 
