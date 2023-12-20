@@ -1,97 +1,101 @@
+# Bring in deps
+import os
 import streamlit as st
-import openai
-import random
+from apikey import apikey
+from langchain.llms import OpenAI
+from langchain.prompts import PromptTemplate
+from langchain.chains import LLMChain
+from langchain.memory import ConversationBufferMemory
 
 # Set up OpenAI API key
-openai.api_key = "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"
+os.environ['OPENAI_API_KEY'] = apikey
 
-def generate_gpt3_quiz(topic, num_questions):
-    quiz_data = {'questions': []}
+# App framework
+st.title('MCQ Quiz Generator')
 
+# Prompt for user's preferred quiz topic
+quiz_topic = st.text_input('Enter your preferred quiz topic:')
+
+# Prompt templates
+question_template = PromptTemplate(
+    input_variables=['topic'],
+    template='Generate a quiz question about {topic}'
+)
+
+# Memory
+question_memory = ConversationBufferMemory(input_key='topic', memory_key='quiz_history')
+
+# LLMs
+llm = OpenAI(temperature=0.9)
+question_chain = LLMChain(llm=llm, prompt=question_template, verbose=True, output_key='question',
+                          memory=question_memory)
+
+# Function to generate AI-generated options for a given question
+def generate_ai_options(question):
+    # Use the OpenAI language model to generate options
+    options_prompt = f"Create multiple-choice options for the following question:\n\n{question}\nOptions:"
+
+    # Generate options using the available method in the langchain library
+    options = llm(options_prompt)
+
+    # Extract and return the generated options, removing unwanted characters and empty options
+    formatted_options = []
+    for option in options.split("\n"):
+        cleaned_option = option.strip()
+        if cleaned_option:
+            formatted_options.append(cleaned_option)
+
+    return formatted_options
+
+# Function to generate quiz questions with AI-generated options
+def generate_quiz(topic, num_questions):
+    questions = []
     for _ in range(num_questions):
-        # Generate question using GPT-3
-        gpt3_prompt = f"Generate a random quiz question about {topic}"
-        gpt3_response = openai.Completion.create(
-            model="text-davinci-003",
-            prompt=gpt3_prompt,
-            temperature=0.7,
-            max_tokens=500
-        )
+        # Generate questions using OpenAI Chat Completion API
+        question = question_chain.run(topic)
 
-        question_text = gpt3_response.choices[0].text.strip()
-        # Generate four answer options for each question
-        options = generate_answer_options(question_text)
-        random.shuffle(options)  # Shuffle options to make it more challenging
-        quiz_data['questions'].append({'text': question_text, 'options': options})
+        # Generate AI-generated options based on the question
+        ai_generated_options = generate_ai_options(question)
 
-    # Assign correct options (e.g., index 0 for simplicity)
-    quiz_data['correct_options'] = [0] * num_questions
+        # For simplicity, let's assume the correct answer is the first option
+        correct_answer = ai_generated_options[0]
 
-    return quiz_data
+        questions.append({"question": question, "options": ai_generated_options, "correct_answer": correct_answer})
+    return questions
 
-def generate_answer_options(question_text):
-    # Generate answer options for a question using GPT-3
-    gpt3_prompt = f"Generate four answer options for the question: {question_text}"
-    gpt3_response = openai.Completion.create(
-        model="text-davinci-003",
-        prompt=gpt3_prompt,
-        temperature=0.7,
-        max_tokens=100
-    )
+# Number of questions
+num_questions = st.number_input('Enter the number of questions:', min_value=1, step=1)
 
-    answer_options = gpt3_response.choices[0].text.split('\n')
-    return [option.strip() for option in answer_options if option.strip()][:4]
+# Generate quiz questions
+if quiz_topic and num_questions > 0:
+    quiz_questions = generate_quiz(quiz_topic, num_questions)
 
-def calculate_score(quiz_data, user_answers):
-    # Check if the lengths match
-    if len(user_answers) != len(quiz_data['correct_options']):
-        raise ValueError("Number of user answers does not match the number of questions.")
+    # Display quiz questions and get user answers
+    user_answers = []
+    for i, q in enumerate(quiz_questions):
+        st.subheader(f"Question {i + 1}: {q['question']}")
 
-    # Compare user answers with correct options and calculate the score
-    score = sum(user_answer == correct_option for user_answer, correct_option in
-                zip(user_answers, quiz_data['correct_options']))
+        # Format options as "1) Option A," "2) Option B," and so on
+        formatted_options = [f"{j + 1}) {option}" for j, option in enumerate(q["options"])]
+        user_answer = st.radio("Select an answer:", formatted_options, key=f"user_answer_{i}")
 
-    return score
+        user_answers.append(user_answer.split(') ')[1])
 
-def main():
-    st.title("MCQ Quiz Application")
+    # Submit quiz and display results
+    if st.button("Submit Quiz"):
+        score = 0
+        st.success("Quiz Results:")
+        for i, q in enumerate(quiz_questions):
+            st.write(f"Q{i + 1}: {q['question']}")
+            st.write(f"Your Answer: {user_answers[i]}")
+            st.write(f"Correct Answer: {q['correct_answer']}")
+            if user_answers[i] == q["correct_answer"]:
+                score += 1
+        st.info(f"Your score: {score}/{len(quiz_questions)}")
+        st.info("Correct answers:")
+        for i, q in enumerate(quiz_questions):
+            st.write(f"Q{i + 1}: {q['correct_answer']}")
 
-    # User input for quiz topic and number of questions
-    topic = st.text_input("Enter your preferred quiz topic:")
-    num_questions = st.number_input("Enter the number of questions:", min_value=1, step=1, value=5)
-
-    # Generate quiz based on user input using GPT-3
-    quiz_data = generate_gpt3_quiz(topic, num_questions)
-
-    if st.button("Generate Quiz"):
-        # Display quiz questions and answer options one by one
-        user_answers = []
-        for i, question in enumerate(quiz_data['questions']):
-            st.write(f"Q{i + 1}: {question['text']}")
-
-            options = question['options']
-            selected_option = st.radio(f"Select an option:", options, key=i)
-            user_answers.append(options.index(selected_option))
-
-            st.write("-----------")  # Separate questions for clarity
-
-        # Button to submit the quiz
-        if st.button("Submit Quiz"):
-            # Calculate and display the score
-            try:
-                score = calculate_score(quiz_data, user_answers)
-
-                # Check if the selected answers are correct or wrong
-                result_messages = [f"Q{i + 1}: {'Correct' if user_answers[i] == correct_option else 'Wrong'}"
-                                for i, correct_option in enumerate(quiz_data['correct_options'])]
-
-                st.success(f"Your score: {score}/{num_questions}")
-                st.info("Result:")
-                for result_message in result_messages:
-                    st.write(result_message)
-
-            except Exception as e:
-                st.error(f"An error occurred: {e}")
-
-if __name__ == "__main__":
-    main()
+# Show history
+with st.expander('Quiz History'):
+    st.info(question_memory.buffer)
