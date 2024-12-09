@@ -1,7 +1,6 @@
 
 # MCQ Quiz Generator
 
-## Project Title: MCQ Quiz Application
 
 ### Overview
 
