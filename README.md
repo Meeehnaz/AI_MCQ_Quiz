@@ -1,6 +1,5 @@
-Submitted to PwC for assessment.
 
-# AI_MCQ_Quiz
+# MCQ Quiz Generator
 
 ## Project Title: MCQ Quiz Application
 
